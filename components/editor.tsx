@@ -1,37 +1,58 @@
 "use client";
 
-import { useTheme } from "next-themes";
-import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
+import { Block, BlockNoteEditor, PartialBlock } from "@blocknote/core";
+import "@blocknote/core/fonts/inter.css";
 import { BlockNoteView } from "@blocknote/mantine";
-import { useCreateBlockNote } from "@blocknote/react";
-
 import "@blocknote/mantine/style.css";
+import { useEffect, useMemo, useState } from "react";
 
-interface EditorProps {
-  onChange: (value: string) => void;
-  initialContent?: string;
-  editable?: boolean;
+async function saveToStorage(jsonBlocks: Block[]) {
+  // Save contents to local storage. You might want to debounce this or replace
+  // with a call to your API / database.
+  localStorage.setItem("editorContent", JSON.stringify(jsonBlocks));
 }
 
-export const Editor = ({ onChange, initialContent, editable }: EditorProps) => {
-  const { resolvedTheme } = useTheme();
+async function loadFromStorage() {
+  // Gets the previously stored editor contents.
+  const storageString = localStorage.getItem("editorContent");
+  return storageString
+    ? (JSON.parse(storageString) as PartialBlock[])
+    : undefined;
+}
 
-  const editor: BlockNoteEditor = useCreateBlockNote({
-    editable,
-    initialContent: initialContent
-      ? (JSON.parse(initialContent) as PartialBlock[])
-      : undefined,
-    useEditorChange: () => {
-      onChange(JSON.stringify(editor.topLevelBlocks, null, 2));
-    },
-  });
+export default function Editor() {
+  const [initialContent, setInitialContent] = useState<
+    PartialBlock[] | undefined | "loading"
+  >("loading");
 
+  // Loads the previously stored editor contents.
+  useEffect(() => {
+    loadFromStorage().then((content) => {
+      setInitialContent(content);
+    });
+  }, []);
+
+  // Creates a new editor instance.
+  // We use useMemo + createBlockNoteEditor instead of useCreateBlockNote so we
+  // can delay the creation of the editor until the initial content is loaded.
+  const editor = useMemo(() => {
+    if (initialContent === "loading") {
+      return undefined;
+    }
+    return BlockNoteEditor.create({ initialContent });
+  }, [initialContent]);
+
+  if (editor === undefined) {
+    return "Loading content...";
+  }
+
+  // Renders the editor instance.
   return (
-    <div>
-      <BlockNoteView
-        editor={editor}
-        theme={resolvedTheme === "dark" ? "dark" : "light"}
-      />
-    </div>
+    <BlockNoteView
+      editor={editor}
+      onChange={() => {
+        saveToStorage(editor.document);
+      }}
+    />
   );
-};
+}
