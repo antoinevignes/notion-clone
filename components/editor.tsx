@@ -1,58 +1,51 @@
 "use client";
 
-import { Block, BlockNoteEditor, PartialBlock } from "@blocknote/core";
-import "@blocknote/core/fonts/inter.css";
+import { useTheme } from "next-themes";
+import { useEdgeStore } from "@/lib/edgestore";
+
 import { BlockNoteView } from "@blocknote/mantine";
+import { useCreateBlockNote } from "@blocknote/react";
+import { BlockNoteEditor, PartialBlock } from "@blocknote/core";
+
 import "@blocknote/mantine/style.css";
-import { useEffect, useMemo, useState } from "react";
 
-async function saveToStorage(jsonBlocks: Block[]) {
-  // Save contents to local storage. You might want to debounce this or replace
-  // with a call to your API / database.
-  localStorage.setItem("editorContent", JSON.stringify(jsonBlocks));
+interface EditorProps {
+  onChange: (value: string) => void;
+  initialContent?: string;
+  editable?: boolean;
 }
 
-async function loadFromStorage() {
-  // Gets the previously stored editor contents.
-  const storageString = localStorage.getItem("editorContent");
-  return storageString
-    ? (JSON.parse(storageString) as PartialBlock[])
-    : undefined;
-}
+const Editor = ({ onChange, initialContent, editable }: EditorProps) => {
+  const { resolvedTheme } = useTheme();
+  const { edgestore } = useEdgeStore();
 
-export default function Editor() {
-  const [initialContent, setInitialContent] = useState<
-    PartialBlock[] | undefined | "loading"
-  >("loading");
-
-  // Loads the previously stored editor contents.
-  useEffect(() => {
-    loadFromStorage().then((content) => {
-      setInitialContent(content);
+  const handleUpload = async (file: File) => {
+    const response = await edgestore.publicFiles.upload({
+      file,
     });
-  }, []);
 
-  // Creates a new editor instance.
-  // We use useMemo + createBlockNoteEditor instead of useCreateBlockNote so we
-  // can delay the creation of the editor until the initial content is loaded.
-  const editor = useMemo(() => {
-    if (initialContent === "loading") {
-      return undefined;
-    }
-    return BlockNoteEditor.create({ initialContent });
-  }, [initialContent]);
+    return response.url;
+  };
 
-  if (editor === undefined) {
-    return "Loading content...";
-  }
+  const editor: BlockNoteEditor = useCreateBlockNote({
+    initialContent: initialContent
+      ? (JSON.parse(initialContent) as PartialBlock[])
+      : undefined,
+    uploadFile: handleUpload,
+  });
 
-  // Renders the editor instance.
   return (
-    <BlockNoteView
-      editor={editor}
-      onChange={() => {
-        saveToStorage(editor.document);
-      }}
-    />
+    <div>
+      <BlockNoteView
+        editor={editor}
+        theme={resolvedTheme === "dark" ? "dark" : "light"}
+        editable={editable}
+        onChange={() => {
+          onChange(JSON.stringify(editor.document, null, 2));
+        }}
+      />
+    </div>
   );
-}
+};
+
+export default Editor;
